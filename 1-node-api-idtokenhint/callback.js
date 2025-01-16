@@ -137,29 +137,3 @@ mainApp.app.get('/api/request-status', async (req, res) => {
     }
   })
 })
-
-mainApp.app.post('/onfido-verification', parser, async (req, res) => {
-  var body = '';
-  req.on('data', function (data) {
-    body += data;
-  });
-  req.on('end', function () {
-    var results = JSON.parse(body.toString());
-    console.log(results);
-
-    const db = new CSVDatabase('data.csv');
-
-    db.create({
-      applicant_id: results?.payload?.resource?.applicant_id ?? "1",
-      given_name: results?.payload?.resource?.output?.given_name ?? "Testing",
-      family_name: results?.payload?.resource?.output?.family_name ?? "Last Name",
-      status: results?.payload?.resource?.status ?? "approved",
-      document_expiration: results?.payload?.resource?.output?.document_expiration ?? "2025-12-31",
-      document_type: results?.payload?.resource?.output?.document_type ?? "Passport",
-      document_number: results?.payload?.resource?.output?.document_number ?? "123456789",
-      issuing_country: results?.payload?.resource?.output?.issuing_country ?? "USA"
-    })
-
-    res.sendStatus(200);
-  })
-})
