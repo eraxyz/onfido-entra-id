@@ -19,6 +19,11 @@ var msal = require('@azure/msal-node');
 const fs = require('fs');
 const crypto = require('crypto');
 var uuid = require('uuid');
+const {
+  DefaultApi,
+  Configuration,
+  Region,
+} = require("@onfido/api");
 
 console.time("startup");
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -168,12 +173,12 @@ cca.acquireTokenByClientCredential(msalClientCredentialRequest).then((result) =>
 fetch( `https://login.microsoftonline.com/${config.azTenantId}/v2.0/.well-known/openid-configuration`, { method: 'GET'} )
 .then(res => res.json())
 .then((resp) => {
-  console.log( `tenant_region_scope = ${resp.tenant_region_scope}`);
-  config.tenant_region_scope = resp.tenant_region_scope;
-  // Check that the Credential Manifest URL is in the same tenant Region and throw an error if it's not
-  if ( config.CredentialManifest && !config.msIdentityHostName.startsWith("https://dev.did.msidentity.com/v1.0/") && !config.CredentialManifest.startsWith(config.msIdentityHostName) ) {
-    throw new Error( `Error in config file. CredentialManifest URL configured for wrong tenant region. Should start with: ${config.msIdentityHostName}` );
-  }
+    console.log( `tenant_region_scope = ${resp.tenant_region_scope}`);
+    config.tenant_region_scope = resp.tenant_region_scope;
+    // Check that the Credential Manifest URL is in the same tenant Region and throw an error if it's not
+    if ( config.CredentialManifest && !config.msIdentityHostName.startsWith("https://dev.did.msidentity.com/v1.0/") && !config.CredentialManifest.startsWith(config.msIdentityHostName) ) {
+      throw new Error( `Error in config file. CredentialManifest URL configured for wrong tenant region. Should start with: ${config.msIdentityHostName}` );
+    }
 }); 
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -181,6 +186,14 @@ fetch( `https://login.microsoftonline.com/${config.azTenantId}/v2.0/.well-known/
 // Note: You'll want to update port values for your setup.
 const app = express()
 const port = process.env.PORT || 8080;
+
+const onfido = new DefaultApi(
+  new Configuration({
+    apiToken: process.env.ONFIDO_API_TOKEN,
+    region: Region.EU, // Supports Region.EU, Region.US and Region.CA
+    baseOptions: { timeout: 60_000 } // Additional Axios options (timeout, etc.)
+  })
+);
 
 var parser = bodyParser.urlencoded({ extended: false });
 
@@ -262,6 +275,134 @@ if ( config.CredentialManifest ) {
 }
 var callback = require('./callback.js');
 
+const CSVDatabase = require('./csvDatabase.js');
+const path = require('path');
+
 console.timeEnd("startup");
+
+
+app.get('/onfido-workflow', function (req, res) {
+    onfido.createApplicant({
+      first_name: "Entra",
+      last_name: "Testing"
+    }).then(applicant => 
+      onfido.createWorkflowRun({
+        applicant_id: applicant.data.id,
+        workflow_id: process.env.ONFIDO_WORKFLOW_ID,
+        link: {
+          completed_redirect_url: `${process.env.NGROK_URL}/onfido-processing?ai=${applicant.data.id}`
+        }
+      })
+    ).then(workflowResponse => {
+      console.log(workflowResponse);
+      return workflowResponse
+    }).then((workflow) => {
+      res.status(200).json({ redirectUrl: workflow?.data?.link?.url });
+    }).catch(e => {
+      console.log(e);
+      console.log("Failed at workflow run creation")
+    })
+});
+
+app.get('/onfido-processing', function (req, res) {
+  var ai = req.query.ai;
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Retrieving Onfido Results...</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1 id="loading">Retrieving Onfido Results...</h1>
+        
+
+      <script>
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        async function fetchAndLoadHtml(ai) {
+            const response = await fetch('/onfido-status?ai=${ai}');
+            if (!response.ok) {
+                throw new Error(\`HTTP error! Status: \${response.status}\`);
+            }
+
+            const htmlContent = await response.text();
+
+            const isValidHtml = response.status != 204 && htmlContent.includes('<'); // Simple check for HTML tags
+            return { isValidHtml, htmlContent };
+        }
+
+        async function startLoading() {
+            const ai = getQueryParam('ai');
+            if (!ai) {
+                document.getElementById('loading').textContent =
+                    "Missing 'ai' query parameter.";
+                return;
+            }
+
+            const maxRetries = 120; // 1 retry per second for 60 seconds
+            let attempts = 0;
+
+            while (attempts < maxRetries) {
+                try {
+                    const { isValidHtml, htmlContent } = await fetchAndLoadHtml(ai);
+
+                    if (isValidHtml) {
+                        window.location = "issuer.html?ai=${ai}";
+                        return;
+                    }
+                } catch (error) {
+                    console.error(\`Attempt \${attempts + 1} failed:\`, error);
+                }
+
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+                attempts++;
+            }
+
+            document.getElementById('loading').textContent =
+                "No results available after multiple attempts. Please try again later.";
+        }
+
+        startLoading();
+        </script>
+    </body>
+    </html>
+    `;
+
+    res.send(htmlContent);
+})
+
+app.get('/onfido-status', function (req, res) {
+  var ai = req.query.ai;
+  const db = new CSVDatabase('./data.csv');
+  db.read(ai, () => {
+    const filePath = path.join(__dirname, 'public/issuer.html');
+
+    fs.readFile(filePath, 'utf8', (err, html) => {
+      if (err) {
+          console.error('Error reading file:', err);
+          return res.status(500).send('Server error');
+      }
+
+      const modifiedHtml = html.replace(
+          'const ai = "1";',
+          `const ai = "${ai}";`
+      );
+
+      res.send(modifiedHtml);
+  });
+  }, () => res.sendStatus(204))
+})
+
 // start server
 app.listen(port, () => console.log(`Example issuer app listening on port ${port}!`))

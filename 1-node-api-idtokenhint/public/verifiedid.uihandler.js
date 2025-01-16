@@ -57,6 +57,7 @@ function presentationVerified(id, response) {
 function issuanceComplete(id, response) {
     hideQRCode();
     displayMessage("Issuance completed");
+    document.getElementById("idVerify").setAttribute("style", "{'display': 'inline-block'}");
 }
 function selfieTaken(id, response) {
     hideQRCode();

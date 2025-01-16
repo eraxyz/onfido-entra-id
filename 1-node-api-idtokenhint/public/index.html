@@ -15,19 +15,26 @@
             <div id="wrap">
 
                 <div style="text-align: center;">
-                    <img src="VerifiedCredentialExpert-icon.png" height=200px; />
+                    <img src="entrust-logo.webp" height=200px; />
                     <h1>Verifiable Credentials  Issuance and Verifier Sample</h1>
             
-                    <button type="button" id="idIssue" class="button">Issue Credential</button>
+                    <!-- <button type="button" id="idIssue" class="button">Issue Credential</button> -->
                     <button type="button" id="idVerify" class="button">Verify Credential</button>
+                    <button type="button" id="onfido" class="button">Onfido</button>
+
+                    <script src="verifiedid.requestservice.client.js"></script>
+                    <script src="verifiedid.uihandler.js"></script>
+
                     <script>
-                            document.getElementById('idIssue').addEventListener('click', () => {
-                                window.location = "issuer.html";
-                            })
+                            // document.getElementById('idIssue').addEventListener('click', () => {
+                            //     window.location = "issuer.html";
+                            // })
                             document.getElementById('idVerify').addEventListener('click', () => {
                                 window.location = "verifier.html";
                             })
-
+                            document.getElementById('onfido').addEventListener('click', () => {
+                                window.location = "onfido.html";
+                            })
                     </script>
                 </div>
 

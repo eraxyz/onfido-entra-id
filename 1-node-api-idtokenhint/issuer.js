@@ -17,6 +17,7 @@ const url = require('url')
 const { SSL_OP_COOKIE_EXCHANGE } = require('constants');
 var msal = require('@azure/msal-node');
 var mainApp = require('./app.js');
+const CSVDatabase = require('./csvDatabase.js');
 
 var parser = bodyParser.urlencoded({ extended: false });
 
@@ -24,7 +25,7 @@ var parser = bodyParser.urlencoded({ extended: false });
 // Setup the issuance request payload template
 var issuanceConfig = {
   "authority": "...set at runtime...",
-  "includeQRCode": false,
+  "includeQRCode": true,
   "registration": {
       "clientName": "...set at runtime...",
       "purpose": "...set at runtime.."
@@ -97,7 +98,10 @@ mainApp.app.get('/api/issuer/issuance-request', async (req, res) => {
   if ( req.query.id ) {
     id = req.query.id;
   }
+  const ai = req.query.ai;
+
   console.log( `id: ${id}` );
+  console.log( `ai: ${ai}` );
 
   var photo = null;
   // get the Access Token
@@ -156,55 +160,79 @@ mainApp.app.get('/api/issuer/issuance-request', async (req, res) => {
 
   // set the claim values - only for idTokenHint attestation
   if ( issuanceConfig.claims ) {
-    if ( issuanceConfig.claims.given_name ) {
-      issuanceConfig.claims.given_name = "Megan";
-    }
-    if ( issuanceConfig.claims.family_name ) {
-      issuanceConfig.claims.family_name = "Bowen";
-    }
-    if ( issuanceConfig.claims.photo ) {
-      console.log( 'We set a photo claim');
-      issuanceConfig.claims.photo = photo;
-    }
-  }
+    const db = new CSVDatabase('data.csv');
+    
+    let onfidoResults = {} 
+    await db.read(ai, async (row) => {
+      console.log(row);
+      onfidoResults = row;
+      if (onfidoResults?.status != "approved") {
+        res.status(422).json({"error_description": "Onfido verification failed."})
+        return;
+      }
 
-  // call Verified ID Request Service issuance API
-  console.log( 'Request Service API Request' );
-  var client_api_request_endpoint = `${mainApp.config.msIdentityHostName}verifiableCredentials/createIssuanceRequest`;
-  console.log( client_api_request_endpoint );
-  console.log( issuanceConfig );
+      if ( issuanceConfig.claims.given_name ) {
+        issuanceConfig.claims.given_name = onfidoResults?.given_name ?? "Luis";
+      }
+      if ( issuanceConfig.claims.family_name ) {
+        issuanceConfig.claims.family_name = onfidoResults?.family_name ?? "Testing";
+      }
+      if ( issuanceConfig.claims.photo ) {
+        console.log( 'We set a photo claim');
+        issuanceConfig.claims.photo = photo;
+      }
+      if ( issuanceConfig.claims.document_expiration ) {
+        issuanceConfig.claims.document_expiration = onfidoResults?.document_expiration ?? "06/12/2032";
+      }
+      if ( issuanceConfig.claims.issuing_country ) {
+        issuanceConfig.claims.issuing_country = onfidoResults?.issuing_country ?? "USA";
+      }
+      if ( issuanceConfig.claims.document_type ) {
+        issuanceConfig.claims.document_type = onfidoResults?.document_type ?? "Passport";
+      }
+      if ( issuanceConfig.claims.document_number ) {
+        issuanceConfig.claims.document_number = onfidoResults?.document_number ?? "1234";
+      }
 
-  var payload = JSON.stringify(issuanceConfig);
-  const fetchOptions = {
-    method: 'POST',
-    body: payload,
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': payload.length.toString(),
-      'Authorization': `Bearer ${accessToken}`
-    }
-  };
+      // call Verified ID Request Service issuance API
+      console.log( 'Request Service API Request' );
+      var client_api_request_endpoint = `${mainApp.config.msIdentityHostName}verifiableCredentials/createIssuanceRequest`;
+      console.log( client_api_request_endpoint );
+      console.log( issuanceConfig );
 
-  console.time("createIssuanceRequest");
-  const response = await fetch(client_api_request_endpoint, fetchOptions);
-  var resp = await response.json()
-  console.timeEnd("createIssuanceRequest");
-  // the response from the VC Request API call is returned to the caller (the UI). It contains the URI to the request which Authenticator can download after
-  // it has scanned the QR code. If the payload requested the VC Request service to create the QR code that is returned as well
-  // the javascript in the UI will use that QR code to display it on the screen to the user.            
-  resp.id = id;                              // add session id so browser can pull status
-  if ( issuanceConfig.pin ) {
-    resp.pin = issuanceConfig.pin.value;   // add pin code so browser can display it
-  }
-  console.log( 'VC Client API Response' );
-  console.log( response.status );
-  console.log( resp );  
+      var payload = JSON.stringify(issuanceConfig);
+      const fetchOptions = {
+        method: 'POST',
+        body: payload,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': payload.length.toString(),
+          'Authorization': `Bearer ${accessToken}`
+        }
+      };
 
-  if ( response.status > 299 ) {
-    resp.error_description = `[${resp.error.innererror.code}] ${resp.error.message} ${resp.error.innererror.message}`;
-    res.status(400).json( resp );  
-  } else {
-    res.status(200).json( resp );       
+      console.time("createIssuanceRequest");
+      const response = await fetch(client_api_request_endpoint, fetchOptions);
+      var resp = await response.json()
+      console.timeEnd("createIssuanceRequest");
+      // the response from the VC Request API call is returned to the caller (the UI). It contains the URI to the request which Authenticator can download after
+      // it has scanned the QR code. If the payload requested the VC Request service to create the QR code that is returned as well
+      // the javascript in the UI will use that QR code to display it on the screen to the user.            
+      resp.id = id;                              // add session id so browser can pull status
+      if ( issuanceConfig.pin ) {
+        resp.pin = issuanceConfig.pin.value;   // add pin code so browser can display it
+      }
+      console.log( 'VC Client API Response' );
+      console.log( response.status );
+      console.log( resp );  
+
+      if ( response.status > 299 ) {
+        resp.error_description = `[${resp.error.innererror.code}] ${resp.error.message} ${resp.error.innererror.message}`;
+        res.status(400).json( resp );  
+      } else {
+        res.status(200).json( resp );       
+      }
+    }, () => console.log(`======================== ${ai} not found`))
   }
 })
 

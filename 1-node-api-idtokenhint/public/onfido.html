@@ -1,0 +1,46 @@
+﻿<!DOCTYPE html>
+<!-- Copyright (c) Microsoft Corporation. All rights reserved.
+     Licensed under the MIT License. -->
+
+<html lang="en">
+    <head>
+        <meta name="description" content="Onfido Verified Credentials">
+        <link rel="stylesheet" href="styles.css">
+        <link rel="icon" href="favicon.png">    
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Onfido</title>
+    </head>
+        
+    <body>
+        <div id="wrap">
+            <div style="text-align: center;">
+                <img id="logo" src="entrust-logo.webp" height=200px; />
+                <h1 id="idTitle">Verifiable Credential Issuance</h1>
+                <h2 id="idSubTitle"></h2>
+                <div id="redirect-message"></div>
+
+            <script>
+            
+                fetch('onfido-workflow')
+                .then((response) => {
+                    response.json()
+                    .catch(error => displayMessage(error) )
+                    .then(function(data) {
+                        if (data.redirectUrl) {
+                            document.getElementById('redirect-message').innerHTML = `
+                                <p>You are being redirected to: <a href="${data.redirectUrl}" target="_blank">${data.redirectUrl}</a></p>
+                            `;
+                            setTimeout(() => {
+                                window.location.href = data.redirectUrl;
+                            }, 1500);
+                        }
+                        
+                    }).catch(error => { console.log(error.message); })
+                }).catch(error => { console.log(error.message); })
+    
+                </script>
+            </div>
+        </div>
+    </body>
+</html>

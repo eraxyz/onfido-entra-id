@@ -49,9 +49,10 @@ function RequestService(onDrawQRCode, onNavigateToDeepLink, onRequestRetrieved, 
         this.requestType = "presentation";
         this.createRequest(this.apiCreatePresentationRequest)
     };
-    this.createIssuanceRequest = function () {
+    this.createIssuanceRequest = function (ai) {
+        console.log(`Issuance AI = ${ai}`);
         this.requestType = "issuance";
-        this.createRequest(this.apiCreateIssuanceRequest)
+        this.createRequest(`${this.apiCreateIssuanceRequest}?ai=${ai}`)
     };
     this.createSelfieRequest = function () {
         this.requestType = "selfie";

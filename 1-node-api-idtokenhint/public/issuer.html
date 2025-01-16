@@ -15,7 +15,7 @@
     <body>
         <div id="wrap">
             <div style="text-align: center;">
-                <img id="logo" src="VerifiedCredentialExpert-icon.png" height=200px; />
+                <img id="logo" src="entrust-logo.webp" height=200px; />
                 <h1 id="idTitle">Verifiable Credential Issuance</h1>
                 <h2 id="idSubTitle"></h2>
                 <p id="photo-help" style="text-align:left;display:none">
@@ -36,9 +36,10 @@
                <div id="payload"></div>
             </div>
 
-            <button type="button" id="issue-credential" class="button bg-nw-purple text-nw-white">Issue Credential</button>
+            <button type="button" id="issue-credential" class="button bg-nw-purple text-nw-white" style="display:none">Issue Credential</button>
             <button type="button" id="check-result" class="button bg-nw-purple text-nw-white" style="display:none">Check Result</button>
             <button type="button" id="take-selfie" class="button bg-nw-purple text-nw-white" style="display:none">Take Selfie</button>
+            <button type="button" id="idVerify" class="button" style="display:none">Verify Credential</button>
             
             <input type='file' id="imageUpload" accept="image/*" class="button bg-nw-blue text-nw-white" style="display:none"/>
             <br/><br/>
@@ -55,6 +56,10 @@
             <script>
                 var qrcode = new QRCode("qrcode", { width: 150, height: 150 });
                 var havePhotoClaim = false;
+
+                const urlParams = new URLSearchParams(window.location.search);
+
+                const ai = urlParams.get('ai');
 
                 fetch('api/issuer/get-manifest')
                 .then(function(response) {
@@ -76,15 +81,9 @@
                     }).catch(error => { console.log(error.message); })
                 }).catch(error => { console.log(error.message); })
 
-                document.getElementById('issue-credential').addEventListener('click', () => {
-                    if ( havePhotoClaim ) {
-                        setUserPhoto();
-                        hideShowPhotoElements("none");
-                        // make sure the photo is sent to API in backend before we continue
-                        setTimeout(requestService.createIssuanceRequest(), 250);
-                    } else {
-                        requestService.createIssuanceRequest();
-                    }
+                document.addEventListener('DOMContentLoaded', () => {
+                    console.log(ai)
+                    requestService.createIssuanceRequest(ai);
                 });
     
                 document.getElementById('take-selfie').addEventListener('click', () => {
@@ -100,6 +99,10 @@
                 document.getElementById('imageUpload').addEventListener('change', function (e) {
                     uploadImage(e);
                 });
+
+                document.getElementById('idVerify').addEventListener('click', () => {
+                    window.location = "verifier.html";
+                })
     
                 </script>
             </div>
